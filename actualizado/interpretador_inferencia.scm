@@ -39,10 +39,10 @@
   '((white-sp
      (whitespace) skip)
     (comment("%" (arbno (not #\newline))) skip)
-    (identifier("@" letter (arbno (or letter digit "?"))) symbol)
+    (identifier("&" letter (arbno (or letter digit "?"))) symbol)
     (float(digit (arbno digit) "." digit (arbno digit)) number)
     (float("-" digit (arbno digit) "." digit (arbno digit)) number)
-    (inmutable-identifier("const" "@" letter (arbno (or letter digit "?"))) symbol)
+    (inmutable-identifier("const" "&" letter (arbno (or letter digit "?"))) symbol)
     (numero(digit (arbno digit)) number)
     (numero("-" digit (arbno digit)) number)
     
@@ -57,11 +57,11 @@
     (expression (float) float-exp)
     (expression (identifier) var-exp)
     (expression("\"" text "\"" )text-exp)
-    (expression ("GLOBALS" "{"(arbno type-exp assing)"}"
+    (expression ("GLOBALS" "{"(arbno type-exp asignacion)"}"
                            "PROGRAM" "{" type-exp "main()"
                            "{" expression "}" "}"
                            )global-exp)
-    (expression("LOCALS" "{" (arbno type-exp assing) "}""{" expression (arbno expression)"}")locals-exp)
+    (expression("LOCALS" "{" (arbno type-exp asignacion) "}""{" expression (arbno expression)"}")locals-exp)
 
     (expression ("BLOCK" "{" expression (arbno expression )"}")block-exp)
     (expression ("print" "(" expression ")" ) print-exp)
@@ -73,8 +73,8 @@
     (expression("call" expression "("(separated-list expression ",")")") call-exp)
     (expression( "apply-bin" "(" expression primitive-bin (arbno expression) ")")primbi-exp)
     (expression("if" expression "{" expression "}" "else" "{" expression "}")if-exp)
-    (expression("dec" "(" (arbno type-exp assing) ")""{"expression "}")decLocal-exp)
-    (expression ("set" var "=" expression)set-exp)
+    (expression("dec" "(" (arbno type-exp asignacion) ")""{"expression "}")decLocal-exp)
+    (expression ("set" variable "=" expression)set-exp)
     (expression ("while" "(" expression ")" "do" "(" expression (arbno expression) ")")while-exp)
     (expression ( "for" "(" identifier "=" expression ";" expression ";" expression ")"
                         "{"expression (arbno expression)"}")for-exp)
@@ -91,16 +91,16 @@
     ;soporte grafos
     (expression ( "edge" "(" identifier "," identifier ")") edge-gra-exp)
     (expression ( "edges" "(" (arbno expression ) ")" ) edges-gra-exp)
-    (expression ( "vrt" "(" (separated-list identifier ",") ")") vertices-g-exp)
-    (expression ( "graph" "(" expression "," expression ")") graph-g-exp)
+    (expression ( "vrt" "(" (separated-list identifier ",") ")") vertices-gra-exp)
+    (expression ( "graph" "(" expression "," expression ")") graph-gra-exp)
     (primitive ("zero?") zero-t-prim)
-    (var (identifier) mutable-var)
-    (var ("const" identifier) inmutable-var)
-    (assing (var "=" expression ";") assing-exp)
+    (variable (identifier) mutable-var)
+    (variable ("const" identifier) inmutable-var)
+    (asignacion (variable "=" expression ";") asignacion-exp)
     
     ; binary-Primitive-exp
     (primitive-bin ("+") suma-prim)
-    (primitive-bin  ("-") resta-prim)
+    (primitive-bin  ("~") resta-prim)
     (primitive-bin ("/") div-prim)
     (primitive-bin  ("*") multi-prim)
     (primitive-bin  ("concat")concat-prim)
@@ -122,10 +122,12 @@
     (primitive-bin ("incoming-n") vecinosEn-prim)
     (primitive-bin ("outgoing-n") vecinosSa-prim)
     
-    ;;---------------------------
+    ;.............................................................
+    ;...........................primitivas unarias................
+    ;.............................................................
 
     
-    ;unary-primitive-exp
+ 
     (primitive-una ("len") lenght-prim)
     (primitive-una ("add_n") addn-prim)
     (primitive-una ("sub_n") subn-prim)
@@ -137,13 +139,13 @@
     (primitive-una("make_V") makeV-prim)
     (primitive-una("make_D") makeD-prim)
     (primitive-una("make_g") makeG-prim)
-    (primitive-una("edges_G") edges-prim)
+    (primitive-una("edges_g") edges-prim)
     (primitive-una("vertices") vertices-prim)
     (primitive-una("head") head-prim)
     (primitive-una("tail") tail-prim)
     (primitive-una("empty?") empty-prim)
     
-    ;caracteristicas adicionales
+    ;caracteristicas adicionales para tipos
     (type-exp ("list" "<" type-exp ">") list-type-exp)
     (type-exp ("int") int-type-exp)
     (type-exp ("float") float-type-exp)
@@ -251,7 +253,7 @@
   (lambda () (sllgen:list-define-datatypes scanner-spec-simple-interpreter grammar-simple-interpreter)))
 
 ;-----------------------------------------------------------------------------------------------
-;Parser, Scanner, Interfaz
+
 
 ;El FrontEnd (Análisis léxico (scanner) y sintáctico (parser) integrados)
 (define scan&parse
@@ -263,7 +265,7 @@
   (sllgen:make-string-scanner scanner-spec-simple-interpreter grammar-simple-interpreter))
 
 ;El Interpretador (FrontEnd + Evaluación + señal para lectura )
-(define interpretador-sin-tipos
+(define interpretador-tipos
   (sllgen:make-rep-loop  "--> "
                          (lambda (pgm) (eval-program pgm)) 
                          (sllgen:make-stream-parser 
@@ -272,7 +274,7 @@
 
 (define interpretador
   (sllgen:make-rep-loop  "--> "
-                         (lambda (pgm) (begin (type-of-program pgm)
+                         (lambda (pgm) (begin (type-program pgm)
                                               (eval-program pgm))) 
                          (sllgen:make-stream-parser 
                           scanner-spec-simple-interpreter
@@ -315,9 +317,9 @@
       (emptyList-exp () (empty-list))
       (global-exp(types exps type-body main-body)
                  (let*(
-                       (ids (map eval-var (map id-var exps)))
-                       (ids-bodies (eval-rands (map exp-var exps) env))
-                       (global-env (extend-recursive-env ids ids-bodies env))
+                       (ids (map evaluate-var (map extract-id-assing exps)))
+                       (ids-bodies (eval-rands (map extract-assign exps) env))
+                       (global-env (extend-env-recursively ids ids-bodies env))
                        )
                    (begin
                    (eval-expression main-body global-env))
@@ -325,9 +327,9 @@
                  )
       (locals-exp(ids-types exps first-instruct instructions)
                  (let*(
-                       (ids (map eval-var (map id-var exps)))
-                       (exps (map exp-var exps))                      
-                       (env (progresive-env ids exps env))
+                       (ids (map evaluate-var (map extract-id-assing exps)))
+                       (exps (map extract-assign exps))                      
+                       (env (build-env-prg ids exps env))
                        )
                    
                    (let loop ((acc (eval-expression first-instruct env))
@@ -366,23 +368,23 @@
                (let (
                      (proc (eval-expression rator env))
                      (args (eval-rands rands env)))
-                 (if (procval? proc)
+                 (if (proc-val? proc)
                      (apply-procedure proc args)
                      proc
                      )))
       (decLocal-exp(types exps body)
-                   (let ((args (eval-rands (map exp-var exps) env))
-                         (ids (map eval-var (map id-var exps))))
+                   (let ((args (eval-rands (map extract-assign exps) env))
+                         (ids (map evaluate-var (map extract-id-assing exps))))
                      (eval-expression body
                                       (extend-env ids args env))))
        (set-exp (id rhs-exp)
-               (let((id (eval-var id)))
-                 (if (number? (find-position id (symbols-env env)))
+               (let((id (evaluate-var id)))
+                 (if (number? (find-position id (extract-symbols-env env)))
                      (begin 
-                       (setref!
+                       (set-ref
                         (apply-env-ent env id)
                         (eval-expression rhs-exp env))1)
-                     (eopl:error  "Attempt to change the value of an immutable variable"))))
+                     (eopl:error  "Intento de cambiar el valor de una variable inmutable no es posible"))))
       (primbi-exp (exp1 prim exp2)
                        (let ((arg1 (eval-expression exp1 env))
                              (arg2 (if (equal? (length exp2) 2)
@@ -407,7 +409,7 @@
                                (loop (eval-expression (car exps) env)
                                      (cdr exps))))
                          (while (eval-expression test-exp env)))
-                       "fin while")))
+                       "end while")))
       (for-exp (id beginning stop-cond sumator first-exp exps)
                (let*((vec (list->vector (list (eval-expression beginning env))))
                      (env (extended-env-record (list id) vec env)))
@@ -423,10 +425,10 @@
                                        (cdr exps))))
                            (eval-expression sumator env)
                            (ciclo))
-                         "fin del for"
+                         "end for"
                          )))))
       (switch-exp (option coincidences coincidences-exps default-exp)
-                  (let((coincidence-exp (coincidence-case
+                  (let((coincidence-exp (iqual-case
                                          (eval-expression option env)
                                          (eval-rands coincidences env)
                                          coincidences-exps)))
@@ -446,8 +448,8 @@
                                 (list->vector (eval-rands values env))))
       (edge-gra-exp (v1 v2) (edge-gra-exp v1 v2))
       (edges-gra-exp (edges) (edges-gra-exp (eval-rands edges env)))
-      (vertices-g-exp (vers) (vertices-g-exp vers))
-      (graph-g-exp (vers edges) (graph-g-exp vers edges))
+      (vertices-gra-exp (vers) (vertices-gra-exp vers))
+      (graph-gra-exp (vers edges) (graph-gra-exp vers edges))
       (else "faltan casos eval-expression")
       )    
     ))
@@ -469,21 +471,25 @@
 
 
 
-;----------------------------contructores-----------------------------------
+;.....................................................................
+;..........................datatypes (constructores)..................
+;.....................................................................
+
 
 ;define-datatype de los procedimientos
-(define-datatype procval procval?
+(define-datatype proc-val proc-val?
   (closure
    (ids (list-of symbol?))
    (body expression?)
-   (env environment?)))
+   (env ambiente?)))
 
 
 ;Funcion que extiende un ambiente y evalua un procedimiento en ese nuevo ambiente extendido
-;apply-procedure: <procedure> <list-of expression> -> numero
+;apply-procedure aplica un procedimiento a una lista de argumentos en el contexto de un entorno
+
 (define apply-procedure
   (lambda (proc args)
-    (cases procval proc
+    (cases proc-val proc
       (closure (ids body env)
                (eval-expression body (extend-env ids args env))))))
 
@@ -492,12 +498,12 @@
 
 
 ;definición del tipo de dato ambiente
-(define-datatype environment environment?
+(define-datatype ambiente ambiente?
   (empty-env-record)
   (extended-env-record
    (syms (list-of symbol?))
    (vect vector?)
-   (env environment?)))
+   (env ambiente?)))
 
 ;definicion de scheme-value
 ;cualquier cosa es un scheme-value
@@ -515,7 +521,7 @@
   (lambda (syms vals env)
     (extended-env-record syms (list->vector vals) env)))
 
-;extend-env-recursively: <list-of symbols> <list-of <list-of symbols>> <list-of expressions> environment -> environment
+;extend-env-recursively: <list-of symbols> <list-of <list-of symbols>> <list-of expressions> ambiente -> ambiente
 ;función que crea un ambiente extendido para procedimientos recursivos
 (define extend-recursively-ite
   (lambda (proc-names idss bodies old-env)
@@ -528,18 +534,18 @@
            (generate-list len) idss bodies)
           env)))))
  
-;extend-recursive-env (lisf-of symbols) <list-of expressions> <environment> -> environment
+;extend-env-recursively (lisf-of symbols) <list-of expressions> <ambiente> -> ambiente
 ;Funcion que crea un ambiente extendido, si el identificador es una variable guarda la variable
 ;si es un procedimiento crea una closure y la guarda
-(define extend-recursive-env
+(define extend-env-recursively
   (lambda (ids exps old-env)
     (let* ((len (length ids))
            (vec (make-vector len))
            (env (extended-env-record ids vec old-env)))
       (for-each
        (lambda (pos body)
-         (if (procval? body)
-             (let((ids-bodies (cases procval body (closure (ids body env)(list ids body)))))
+         (if (proc-val? body)
+             (let((ids-bodies (cases proc-val body (closure (ids body env)(list ids body)))))
                (vector-set! vec pos (closure (car ids-bodies) (cadr ids-bodies) env))
                )                  
              (vector-set! vec pos body))
@@ -559,51 +565,27 @@
 ;función que busca un símbolo en un ambiente
 (define apply-env
   (lambda (env sym)
-    (deref (apply-env-ent env sym))))
+    (des-ref (apply-env-ent env sym))))
 
-;(apply-env-ent env sym)))
 
 (define apply-env-ent
   (lambda (env sym)
-    (cases environment env
+    (cases ambiente env
       (empty-env-record ()
                         (eopl:error 'apply-env-ent "No binding for ~s" sym))
       (extended-env-record (syms vals env)
-                           (let* ((sym (if (inmutable-var? syms sym)
-                                           (inmutable-var-convert sym)
+                           (let* ((sym (if (is-inmutable-var? syms sym)
+                                           (make-inmutable-sym sym)
                                            sym))
                                   (pos (find-position sym syms)))
                              (if (number? pos)
-                                 (a-ref pos vals)
+                                 (ref-vec pos vals)
                                  (apply-env-ent env sym)))))))
 
-;***************************ENVIRONMENT-TYPE**************************************
-(define-datatype type-environment type-environment?
-  (empty-tenv-record)
-  (extended-tenv-record
-   (syms (list-of symbol?))
-   (vals (list-of type?))
-   (tenv type-environment?)))
 
-(define empty-tenv empty-tenv-record)
-(define extend-tenv extended-tenv-record)
-
-;apply-tenv <environment> <symbol> -> type
-;Funcion que busca el tipo de una variable en un ambiente de tipos 
-(define apply-tenv 
-  (lambda (tenv sym)
-    (cases type-environment tenv
-      (empty-tenv-record ()
-                         (eopl:error 'apply-tenv "Unbound variable ~s" sym))
-      (extended-tenv-record (syms vals env)
-                            (let* ((sym (if (inmutable-var? syms sym)
-                                            (inmutable-var-convert sym)
-                                            sym))
-                                   (pos (list-find-position sym syms)))
-                              (if (number? pos)
-                                  (list-ref vals pos)
-                                  (apply-tenv env sym)))))))
-;---------------------------AUXILIAR-FUNTIONS------------------------------------------
+;.............................................................................................
+;...............................AUXILIARES DEL AMBIENTE.......................................
+;.............................................................................................
 
 ; funciones auxiliares para encontrar la posición de un símbolo
 ; en la lista de símbolos de un ambiente
@@ -661,8 +643,10 @@
       [else (eopl:error "no se pueden comparar los numeros")])))        
     
 
-;comparar <scheme-value> <scheme-value> -> boolç
-;Funcion que recibe 2 valores y si ambos son ò strings ò numeros los compara
+
+;función comparar-strings-int es un dispatcher que compara dos valores,
+;ya sea cadenas o números, basándose en una operación pasada como evaluar
+
 (define comparar-strings-int
   (lambda (e1 e2 evaluar)
     (cond
@@ -672,36 +656,38 @@
        
 
 
-;Funcione que retorna true si una operacion binaria es verdadera, o false si
-;la exprecion es falsa
-;valor_verdad?: primitiva-binaria x expression x expression => number
-;usage:(valor-true? prim exp1 exp2) => 1 si al aplicar la primitiva a
-;los 2 argumentos el valor es diferente a 0, 0 de caso contrario
+;valor-true? está diseñada para devolver la cadena
+;"true" si el valor dado es verdadero y "false" si es falso
 (define valor-true?
   (lambda (bool)
     (if bool "true" "false")))
 
-;real-mod <number> <number> -> number
-;Funcion modulo para numeros reales
+
+;unción real-mod calcula el módulo de dos números reales
 (define real-mod
   (lambda (x y)
           (- x (* (truncate (/ x y)) y))))
 
-;progresive-env <list-of symbols> <list-of expression> <environment> -> environment
-;Funcion que retorna un ambiente extendido en el cual la declaracion de una variable
-;conoce a todas las variables predecesoras
-(define progresive-env
-  (lambda (ids exps env)
-    (let* ((len (length ids))
-           (vec (make-vector len))
-           (env (extended-env-record ids vec env)))
+
+;función build-env-prg tiene como propósito construir un entorno
+;progresivamente evaluando una lista de expresiones y asociándolas
+;con identificadores en un entorno extendido
+
+(define build-env-prg
+  (lambda (ids express env)
+    (let* ((index (length ids))
+           (vect (make-vector index))
+           (env (extended-env-record ids vect env)))
       (for-each
-       (lambda (pos exp)
-        (vector-set! vec pos (eval-expression exps env)))
-       (generate-list len) exps)
+       (lambda (pos exps)
+         (vector-set! vect pos (eval-expression exps env)))
+       (generate-list index) express)
       env)))
-;-------------------------LISTAS---------------------------------------
-;datatype para representar las listas
+;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+;,,,,,,,,,,,,,,,,,,,,,,,funciones para  listas,,,,,,,,,,,,,,,,,,,,,,,,
+;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+
+;constructores para representar las listas
 (define-datatype lista lista?
   (empty-list)
   (non-empty-list (values list?))
@@ -720,7 +706,7 @@
 ;,,,,,,,,,,,,,,,,,,,,,,,FUNCIONES SOPORTE VECTORES,,,,,,,,,,,,,,,,,,,,,,,,
 ;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 
-;datatype  vectores
+;constructores para representar  vectores
 (define-datatype vect vect?
   (empty-vec)
   (non-empty-vec (values vector?))
@@ -781,7 +767,7 @@
 ;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,SOPORTE DICCIONARIOS,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 ;,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 
-;datatype para representar diccionarios
+;construcores para representar diccionarios
 (define-datatype dictionary dictionary?
   (empty-dict)
   (non-empty-dict (keys list)
@@ -1144,81 +1130,79 @@
                                   resultado
                                   )))))
                    (find-vecinos vrt lista-aristas))))))
-;----------------BLOCK-AND-SET-FUNTIONS--------------------------------
-;id-var <assing-exp> -> symbol
-;Funcion que retorna la id de una exprecion de asignacion
-(define id-var
+
+;..........................................................
+;.......................BLOCK..............................
+;..........................................................
+
+
+;Esta función extract-id-assing toma una expresión exp y devuelve el identificador asociado a una asignación.
+;Se utiliza para procesar estructuras del tipo asignacion-exp, que representaN asignaciones
+(define extract-id-assing
   (lambda(exp)
-    (cases assing exp
-      (assing-exp (id exp)  id)
-      )
-    )
-  )
+    (cases asignacion exp
+      (asignacion-exp (id exp)  id))))
 
-;exp-var <assing-exp> -> expression
-;Funcion que retorna la expression de un exprecion de asignacion
-(define exp-var
-  (lambda(exp)
-    (cases assing exp
-      (assing-exp (id exp)  exp)
-      )
-    )
-  )
+;La función extract-assign parece estar diseñada para extraer una expresión de tipo asignacion-exp de una estructura más amplia,
+;devolviendo la parte correspondiente a exps dentro de la asignación
 
+(define extract-assign
+  (lambda (exps)
+    (cases asignacion exps
+      (asignacion-exp (id exp) exp) ; Extrae `exp` de la asignación
+      (else (eopl:error 'extract-exp-from-assign "No es una expresión asignacion-exp"))))) 
 
-;eval-var <var-exp> -> symbol
-;Funcion que recibe un var-exp y retorna la representacion, si es mutable retorna l id
-;si no es mutable retorna la id antecedida con la palabra conts
-(define eval-var
-  (lambda (variable)
-    (cases var variable
-      (mutable-var (id) id)
-      (inmutable-var (id) (string->symbol(string-append "conts" (symbol->string id))))
+;La función evaluate-var evalúa una variable var y la procesa de la siguiente manera:
+
+;Si la variable es del tipo mutable-var, simplemente devuelve su identificador (id).
+;Si la variable es del tipo inmutable-var, transforma su identificador id
+;en un símbolo con el prefijo "const".Esto se hace para distinguir entre
+;variables mutables e inmutables.
+
+(define evaluate-var
+  (lambda (var)
+    (cases variable var
+      (mutable-var (ids) ids)
+      (inmutable-var (ids) (string->symbol(string-append "const" (symbol->string ids))))
       ))
   )
 
-;caracter-index <string> -> bool or number
-;Funcion que recibe un string y retorna la posicion en la cual se encuentra el caracter
-;@, si no lo encuentra retorna #f
-(define caracter-index
-  (lambda (string)
+;La función find-char-index busca el primer índice de un carácter específico (en este caso, #\&)
+;dentro de una cadena string. Si el carácter no está presente, devuelve #f
+
+(define find-char-index
+  (lambda (str)
     (let loop ((index 0))
       (cond
-        ((= index (string-length string)) #f)
-        ((char=? (string-ref string index) #\@) index)
-        (else (loop (+ index 1)))
-        )
-      )
-    )
-  )
+        ((= index (string-length str)) #f)
+        ((char=? (string-ref str index) #\&) index)
+        (else (loop (+ index 1)))))))
 
-;comparar-symbol <symbol> <symbol> -> bool
-;Funcion que recibe 2 symbolos y los compara, ambos deben contener el caracter @
-;si el primer symbol inicia con la palabra conts verifica si son iguales despues de la @
-;si no inicia con conts retorna #f
-(define comparar-symbol
-  (lambda (simbolo1 simbolo2)
-    (let* ((cadena1 (symbol->string simbolo1))
-           (cadena2 (symbol->string simbolo2))
-           (indice1 (caracter-index cadena1))
-           (indice2 (caracter-index cadena2)))
-      (if (and indice1 
-               indice2
-               (string-prefix? "conts" cadena1))
-          (string=? (substring cadena1 (+ indice1 1))
-                    (substring cadena2 (+ indice2 1)))
+;función compare-sym está diseñada para comparar dos símbolos, evaluando ciertas condiciones específicas
+
+(define compare-sym
+  (lambda (sym1 sym2)
+    (let* ((str1 (symbol->string sym1))
+           (str2 (symbol->string sym2))
+           (index1 (find-char-index str1))
+           (index2 (find-char-index str2)))
+      (if (and index1 
+               index2
+               (string-starts? "const" str1))
+          (string=? (substring str1 (+ index1 1))
+                    (substring str2 (+ index2 1)))
           #f)
       )
     )
   )
 
-;inmutable-var? <list-of symbol> <symbol> -> bool
-;Funcion que recibe un symbolo y le añade la palabra conts al inicio
-;y verifica si el nuevo symbolo esta en una lista
-(define inmutable-var?
-  (lambda (list sym)
-    (let((const-sym (string->symbol(string-append "conts" (symbol->string sym)))))
-      (if (list? (member const-sym list))
+;La función inmutable-var? verifica si un símbolo (sy) tiene una versión inmutable (con el prefijo "const")
+;dentro de una lista (ls).
+
+(define is-inmutable-var?
+  (lambda (ls sy)
+    (let((sym-str (string->symbol(string-append "const" (symbol->string sy)))))
+      (if (list? (member sym-str ls))
           #t
           #f
           )
@@ -1226,91 +1210,78 @@
     )
   )
 
-;inmutable-var-conver <symbol> -> symbol
-;Funcion que recibe un symbol y le añade la palabra conts al inicio
-(define inmutable-var-convert
+;Convierte un símbolo dado en su versión inmutable, agregando el prefijo "const"
+
+(define make-inmutable-sym
   (lambda (sym)
-    (string->symbol(string-append "conts" (symbol->string sym)))
+    (string->symbol(string-append "const" (symbol->string sym)))
     )
   )
 
-;inmutable-var-id <symbol> -> symbol
-;Funcion que recibe una inmutable-var y retorna su id
-(define inmutable-var-id
+;función inmutable-symbol-id tiene como propósito extraer la parte de un símbolo que comienza desde un índice específico (index)
+;determinado por la posición de un carácter (usando find-char-index)
+
+(define inmutable-symbol-id
   (lambda (sym)
-    (let*((cadena (symbol->string sym))
-          (indice (caracter-index cadena))
+    (let*((str (symbol->string sym))
+          (index (find-char-index str))
           )
-      (string->symbol(substring cadena indice)))
+      (string->symbol(substring str index )))
     )
   )
 
-;string-prefix? <string> <string> -> bool
-;Funcion que recibe un prefijo(string) y una cadena(string) y verifica
-;si la cadena inicia con el prefijo dado
-(define string-prefix?
-  (lambda (prefijo string)
-    (and (>= (string-length string) (string-length prefijo)) 
-         (string=? (substring string 0 (string-length prefijo)) prefijo))
+; función string-starts? verifica si una cadena string comienza con un prefijo dado prefijo.
+(define string-starts?
+  (lambda (prx st)
+    (and (>= (string-length st) (string-length prx)) 
+         (string=? (substring st 0 (string-length prx)) prx))
     )
   )
 
 
-;symbols-env <environment> -> <list-of symbols>
-;Funcion que extrae la list de symbols de un environment
-(define symbols-env
+;Tu función extract-symbols-env tiene como propósito recopilar todos los símbolos de un entorno
+;(en una estructura de entorno jerárquico) lista
+(define extract-symbols-env
   (lambda (env)
-    (cases environment env
+    (cases ambiente env
       (empty-env-record ()(list))
-      (extended-env-record (syms vals env) (append syms (symbols-env env)))
+      (extended-env-record (sy val env) (append sy (extract-symbols-env env)))
       )
     )
   )
-;----------------EXPRESSION-EVALUATOR----------------------------------
+;......................................................................................
+;........................referecias en vectores con sus funciones .....................
+;.....................................................................................
 
-;*****************References****************************************
-;datatypes para las referencias
-(define-datatype reference reference?
-  (a-ref (position integer?)
+;constructores para las referencias
+(define-datatype referenicas-vec reference-vec?
+  (ref-vec (pos integer?)
          (vec vector?)))
 
-(define deref
+(define des-ref
   (lambda (ref)
-    (primitive-deref ref)))
+    (primitiva-des-ref ref)))
 
-(define primitive-deref
+(define primitiva-des-ref
   (lambda (ref)
-    (cases reference ref
-      (a-ref (pos vec)
+    (cases referenicas-vec ref
+      (ref-vec (pos vec)
              (vector-ref vec pos)))))
 
-(define setref!
+(define set-ref
   (lambda (ref val)
-    (primitive-setref! ref val)))
+    (primitiva-set-ref ref val)))
 
-(define primitive-setref!
+(define primitiva-set-ref
   (lambda (ref val)
-    (cases reference ref
-      (a-ref (pos vec)
-             (vector-set! vec pos val)))))
+    (cases referenicas-vec ref
+      (ref-vec (pos vect)
+             (vector-set! vect pos val)))))
 
 
 
+;funcion que permite las operaciones binarias como suma resta multiplicacion division del interprete
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-;apply-primitive: <primitiva> <list-of-expression> -> numero
 (define apply-primitive-b
   (lambda (prim-b args)
     (cases primitive-bin prim-b
@@ -1339,13 +1310,12 @@
                               ((not(and (list? (car args)) (list? (cadr args))))
                               (non-empty-list (append (extract-list-valores (car args))
                                                  (extract-list-valores (cadr args)))))(else
-                               (eopl:error "Valores no validos para appens ~s y ~s"
+                               (eopl:error "Valores no son correctos ~s y ~s"
                                            (car args)
                                            (cadr args)))))
       (addEdge-prim() (if (> (length args)2)
-                                (eopl:error "the expected number of arguments does not ~%
-                                              match the given number~%
-                                              expectend: 2~% given: ~s" (length args))
+                                (eopl:error "El número esperado de argumentos no coincide con el número proporcionado.
+                                              Esperado: 2 Proporcionado: ~s" (length args))
                                 (insert-edge-graph (car args) (cases arista (cadr args)
                                                        (edge-exp (e1 e2)(list e1 e2))))
                                 )
@@ -1368,29 +1338,27 @@
       (refDict-prim() (dict-ref (car args) (cadr args)))
       (setDict-prim() (dict-set (car args) (cadr args)))
       (vecinosEn-prim() (if (> (length args)2)
-                                (eopl:error "the expected number of arguments does not ~%
-                                              match the given number~%
-                                              expectend: 2~% given: ~s" (length args))
+                                (eopl:error "El número esperado de argumentos no coincide con el número proporcionado.
+                                              Esperado: 2 Proporcionado: ~s" (length args))
                                 (non-empty-list
                                  (symbol-a-strings (get-vecinos-entrantes (car args) (cadr args))))
                                 )
                            )
       
       (vecinosSa-prim() (if (> (length args)2)
-                                (eopl:error "the expected number of arguments does not ~%
-                                              match the given number~%
-                                              expectend: 2~% given: ~s" (length args))
+                                (eopl:error "El número esperado de argumentos no coincide con el número proporcionado.
+                                              Esperado: 2 Proporcionado: ~s" (length args))
                                 (non-empty-list
                                  (symbol-a-strings (get-vecinos-salientes (car args) (cadr args))))))
       (else "no hay mas ")                 
       )))
 
 
-;Funcion que resuelve las operaciones de cada primitiva unaria
-;apply-unary-primitive: <primitiva> <list-of-expression> -> numero
+; funcion que permite las operaciones unarias del interprete
+
 (define apply-primitive-u
-  (lambda (prim-u arg)
-    (cases primitive-una prim-u
+  (lambda (prim-una arg)
+    (cases primitive-una prim-una
       (lenght-prim () (string-length arg))
       (addn-prim () (+ 1 arg))
       (subn-prim () (- arg 1))
@@ -1417,7 +1385,7 @@
                                (non-empty-vec (list->vector arg))
                                )))
       (makeD-prim ()(cond
-                          ((not(equal? (length arg) 2)) "Not valid aplicattion for make-dict")
+                          ((not(equal? (length arg) 2)) "aplicacion no valida para makeD")
                           ((and(null? (car arg)) (null? (cadr arg)))
                            (make-dict (list) (list)))
                           ((and (not(null? (car arg)))
@@ -1426,9 +1394,8 @@
                            )))
             (makeG-prim()
                        (if (> (length arg) 2)
-                           (eopl:error "the expected number of arguments does not ~%
-                                        match the given number~%
-                                        expectend: 2~% given: ~s" (length arg))
+                           (eopl:error "El número esperado de argumentos no coincide con el número proporcionado.
+                                              Esperado: 2 Proporcionado: ~s" (length arg))
                            (if (valid-graph-data? (car arg)(cadr arg))
                                (if (and (lista? (car arg)) (lista? (cadr arg)))
                                    (make-graph (remove-dups (extract-list-valores (car arg)))
@@ -1436,7 +1403,7 @@
                                
                                    (make-graph (remove-dups (get-vertices (car arg)))
                                                  (remove-dups (get-edges (cadr arg)))))
-                               "Not valid aplication for make-graph"
+                               "aplicacion no valida para  make_G"
                                )))
       (edges-prim () (if (grafos?  arg)
                               (cases grafos arg
@@ -1444,14 +1411,14 @@
                                                     
                               (if (list?  arg)
                                   (caddr arg)
-                                  "Is not a graph"
+                                  "esto no es un grafo"
                                   )))
       (vertices-prim () (if (grafos?  arg)
                               (cases grafos arg
                                 (graph-exp (vs es) (non-empty-list (get-vertices vs))))
                               (if (list?  arg)
                                   (cadr arg)
-                                  "Is not a graph"
+                                  "esto no es un grafo"
                                   )))
       (head-prim ()
                       (if (list? arg)
@@ -1468,7 +1435,7 @@
                                   (list)
                                   (cdr arg)
                                   )
-                              "Argument not is a list"
+                              "los agumentos no son una lista valida"
                               )))
       (empty-prim () (cases lista arg (empty-list() "true")
                             (non-empty-list (vals) "false")(empty-list "true")))
@@ -1478,23 +1445,46 @@
 
 
 
-;-----------------------------------------------------------------------------------------------
-;----------------------------------TIPOS--------------------------------------------------------
-;-----------------------------------------------------------------------------------------------
+
+;................................................................................
+;.....................................ambiente para tipos.........................
+;...................................................................................
 
 
-;*********************************DEFINITION******************************************************
-;*************************************************************************************************
+(define-datatype type-environment type-environment?
+  (empty-tipe-env-record)
+  (extended-tipe-env-record
+   (syms (list-of symbol?))
+   (vals (list-of type?))
+   (types-env type-environment?)))
+
+(define empty-tenv empty-tipe-env-record)
+(define extend-tenv extended-tipe-env-record)
+
+;apply-tenv <environment> <symbol> -> type
+;Funcion que busca el tipo de una variable en un ambiente de tipos 
+(define apply-tenv 
+  (lambda (types-env sym)
+    (cases type-environment types-env
+      (empty-tipe-env-record ()
+                         (eopl:error 'apply-tenv "Unbound variable ~s" sym))
+      (extended-tipe-env-record (syms vals env)
+                            (let* ((sym (if (is-inmutable-var? syms sym)
+                                            (make-inmutable-sym sym)
+                                            sym))
+                                   (pos (list-find-position sym syms)))
+                              (if (number? pos)
+                                  (list-ref vals pos)
+                                  (apply-tenv env sym)))))))
+
+;.................................................................................................
+;...................................GRAMATICA TIPOS...............................................
+;..................................................................................................
 (define-datatype type type?
-  (atomic-type
-   (name symbol?))
-  (proc-type
-   (arg-types (list-of type?))
-   (result-type type?))
-  (structure-type
-   (name symbol?)
-   (types (list-of symbol?)))
-  )
+  (atomic-type(name symbol?))
+ (proc-type(arg-types (list-of type?))(result-type type?))
+  (structure-type(name symbol?)
+   (types (list-of symbol?))))
 
 (define int-type
   (atomic-type 'int))
@@ -1508,7 +1498,7 @@
 (define string-type
   (atomic-type 'string))
 
-(define edge-type
+(define arista-type
   (structure-type 'edge '(string)))
 
 (define edges-type
@@ -1607,7 +1597,7 @@
       (String-type-exp()string-type)
       (float-type-exp ()float-type)
       (void-type() (atomic-type 'void))
-      (edge-type-exp () edge-type)
+      (edge-type-exp () arista-type)
       (edges-type-exp () edges-type)
       (vertices-type-exp () vertices-type)
       (graph-type-exp () graph-type)
@@ -1640,66 +1630,56 @@
 
 
 ;********************************CHECKER-OF-PROGRAM-TYPE************************************************
-;type-of-program: <programa> -> type
+
 ;función que chequea el tipo de un programa teniendo en cuenta un ambiente dado (se inicializa dentro del programa)
-(define type-of-program
+(define type-program
   (lambda (pgm)
     (cases program pgm
-      (a-program (exp) (type-of-expression exp (empty-tenv))))))
+      (a-program (exp) (type-expression exp (empty-tenv))))))
 
 ;eval-expression: <expression> <enviroment> -> type
 ; chequea el tipo de la expresión en el ambiente de entrada
-(define type-of-expression
-  (lambda (exp tenv)
+(define type-expression
+  (lambda (exp types-env)
     (cases expression exp
-      (lit-ent-exp (number)
-                   int-type)
-      (lit-float-exp (number)
-                     float-type)
-      (text-exp(text)
-               string-type)
-      
-      (true-exp ()
-                bool-type)
-      (false-exp ()
-                 bool-type)
+      (ent-exp (number)int-type)
+      (float-exp (number)float-type)
+      (text-exp(text)string-type)
+      (true-exp ()bool-type)
+      (false-exp ()bool-type)
+      (emptyList-exp() empty-list-type)
+      (var-exp (id)(apply-tenv types-env id))
 
-      (empty-list-exp() empty-list-type)
+      (edge-gra-exp (v1 v2) arista-type)
       
-      (var-exp (id)
-               (apply-tenv tenv id)
-               )
-
-      (edge-g-exp (v1 v2) edge-type)
+      (edges-gra-exp (edges) edges-type)
       
-      (edges-g-exp (edges) edges-type)
+      (vertices-gra-exp (vers) vertices-type)
       
-      (vertices-g-exp (vers) vertices-type)
-      
-      (graph-g-exp (vers edges) (if (and (check-equal-type! (type-of-expression vers)
+      (graph-gra-exp (vers edges) (if (and (check-equal-type! (type-expression vers)
                                                              vertices-type vers)
-                                         (check-equal-type! (type-of-expression edges)
+                                         (check-equal-type! (type-expression edges)
                                                             edges-type edges))
                                     (graph-type)
                                     (eopl:error "Bab values types por endges and vertices")
                                     )
                    )
 
-      (primapp-un-exp(prim rand)
+      (primun-exp(prim rand)
                      (let* ((rand-type (if (> (length rand) 1)
-                                           (types-of-expressions rand tenv)
-                                           (type-of-expression (car rand) tenv)))
+                                           (types-of-expressions rand types-env)
+                                           (type-expression (car rand) types-env)))
                             (cases (type-of-un-primitive prim))
                             (primitive  (cond((and (list? rand-type) (equal? (length rand-type) 2)
-                                                   (or (equal? (unary-exeption-prim? prim) "vector-prim")
-                                                       (equal? (unary-exeption-prim? prim) "dict-prim")))
-                                              (match-binary-prim-type (car rand-type) (cadr rand-type) cases))
+                                                   (or (equal? (unary-exeption-prim? prim) "vector")
+                                                       (equal? (unary-exeption-prim? prim) "dict")))
+                                              (find-binary-prim-type (car rand-type) (cadr rand-type) cases))
                                              
                                              ((and (list? rand-type) (> (length rand-type) 2))
-                                              (match-unary-prim-type (type-of-structure rand-type)cases))
+                                              (find-unary-prim-type (type-of-structure rand-type)cases))
 
                                              (else
-                                              (match-unary-prim-type rand-type cases))
+                                              (find-unary-prim-type rand-type cases))
                                              ))
                             (args-types-length (extrac-args-types-proc primitive))
                             )
@@ -1726,35 +1706,35 @@
                        )                    
                      )
 
-      (primapp-bin-exp (rand1 prim rand2)
-                       (let*((rand-type1 (type-of-expression rand1 tenv))
+      (primbi-exp (rand1 prim rand2)
+                       (let*((rand-type1 (type-expression rand1 types-env))
                              (rand-type2 (if (equal? (length rand2) 2)
-                                             (list (type-of-expression (car rand2) tenv)
-                                                   (type-of-expression (cadr rand2) tenv))
-                                             (type-of-expression (car rand2) tenv)))
-                             (cases (type-of-bin-primitive prim))
+                                             (list (type-expression (car rand2) types-env)
+                                                   (type-expression (cadr rand2) types-env))
+                                             (type-expression (car rand2) types-env)))
+                             (cases (type-binaria-prim prim))
                              (primitiva (if (and (list? rand-type2) (equal? (length rand-type2) 2))
-                                            (match-binary-prim-exeption-type
+                                            (resolve-binary-prim-case
                                              rand-type1 (car rand-type2) (cadr rand-type2) cases)
-                                            (match-binary-prim-type
+                                            (find-binary-prim-type
                                              rand-type1 rand-type2 cases))))
 
                          (if (equal? (length rand2) 2)
                              (type-of-application
                               primitiva
-                              (types-of-expressions (list rand1 (car rand2) (cadr rand2)) tenv)
+                              (types-of-expressions (list rand1 (car rand2) (cadr rand2)) types-env)
                               prim (list rand1 (car rand2) (cadr rand2)) exp)
                              
                              (type-of-application
                               primitiva
-                              (types-of-expressions (list rand1 (car rand2)) tenv)
+                              (types-of-expressions (list rand1 (car rand2)) types-env)
                               prim (list rand1 rand2) exp)
                              )
                          ) 
                        )
       
       (list-exp (args)
-                (let*((types-list (types-of-expressions args tenv))
+                (let*((types-list (types-of-expressions args types-env))
                       (type-of-struct (type-of-structure types-list)))
                   (if (cases type type-of-struct
                         (atomic-type(n)#t)
@@ -1767,7 +1747,7 @@
                 )
 
       (vect-exp(args)
-               (let*((types-list (types-of-expressions args tenv))
+               (let*((types-list (types-of-expressions args types-env))
                      (type-of-struct (type-of-structure types-list)))
                  (structure-type 'vect (list (atomic-type-value type-of-struct)))
                  )
@@ -1775,8 +1755,8 @@
 
       (dict-exp(keys values)
                (let*(
-                     (keys-types (types-of-expressions keys tenv))
-                     (values-types (types-of-expressions values tenv))
+                     (keys-types (types-of-expressions keys types-env))
+                     (values-types (types-of-expressions values types-env))
                      (keys-type-checked-converted
                       (atomic-type-value (type-of-structure keys-types)))
                      (type-struct (type-of-structure values-types))
@@ -1801,37 +1781,37 @@
                )
       
       (if-exp (test-exp true-exp false-exp)
-              (let ((test-type (type-of-expression test-exp tenv))
-                    (false-type (type-of-expression false-exp tenv))
-                    (true-type (type-of-expression true-exp tenv)))
+              (let ((test-type (type-expression test-exp types-env))
+                    (false-type (type-expression false-exp types-env))
+                    (true-type (type-expression true-exp types-env)))
                 (check-equal-type! test-type bool-type test-exp)
                 (check-equal-type! true-type false-type exp)
                 true-type))
 
       
-      (localVar-exp (ids-types exps body)
+      (decLocal-exp (ids-types exps body)
                     (let*(
-                          (ids (map eval-var (map id-var exps)))
-                          (exps (map exp-var exps))
+                          (ids (map evaluate-var (map extract-id-assing exps)))
+                          (exps (map extract-assign exps))
                           (defined-types (eval-defined-types ids-types))                       
-                          (tenv-extend (extended-tenv-record ids defined-types tenv))
+                          (tenv-extend (extended-tipe-env-record ids defined-types types-env))
                           (exps-types (types-of-expressions exps tenv-extend))
                           )
                       (begin
                         (for-each
                          check-equal-type!
                          defined-types exps-types ids)
-                        (type-of-expression body tenv-extend))
+                        (type-expression body tenv-extend))
                      
                       )
                     )
       
-      (LOCALS-exp (ids-types exps first-instruct instructs)
+      (locals-exp (ids-types exps first-instruct instructs)
                   (let*(
-                        (ids (map eval-var (map id-var exps)))
-                        (exps (map exp-var exps))
+                        (ids (map evaluate-var (map extract-id-assing exps)))
+                        (exps (map extract-assign exps))
                         (defined-types (eval-defined-types ids-types))                       
-                        (tenv-extend (extended-tenv-record ids defined-types tenv))
+                        (tenv-extend (extended-tipe-env-record ids defined-types types-env))
                         (exps-types (types-of-expressions exps tenv-extend))
                         )
                     (begin
@@ -1845,12 +1825,12 @@
 
       (global-exp (ids-types exps type-body main-body)
                   (let*(
-                        (ids (map eval-var (map id-var exps)))
-                        (exps (map exp-var exps))
+                        (ids (map evaluate-var (map extract-id-assing exps)))
+                        (exps (map extract-assign exps))
                         (defined-types (eval-defined-types ids-types))                       
-                        (tenv-extend (extended-tenv-record ids defined-types tenv))
+                        (tenv-extend (extended-tipe-env-record ids defined-types types-env))
                         (exps-types (types-of-expressions exps tenv-extend))
-                        (main-type (type-of-expression main-body tenv-extend))
+                        (main-type (type-expression main-body tenv-extend))
                         (defined-main-type (expand-type-expression type-body))
                         )                   
                     (begin
@@ -1864,38 +1844,38 @@
                   )
       
       (proc-exp (texps ids body)
-                (type-of-proc-exp texps ids body tenv))
+                (type-of-proc-exp texps ids body types-env))
 
       
-      (app-exp (rator rands)
+      (call-exp (rator rands)
                (type-of-application
-                (type-of-expression rator tenv)
-                (types-of-expressions rands tenv)
+                (type-expression rator types-env)
+                (types-of-expressions rands types-env)
                 rator rands exp))
                  
       (letrec-exp (result-texps proc-names texpss idss bodies letrec-body)
                   (type-of-letrec-exp result-texps proc-names texpss idss bodies
-                                      letrec-body tenv))
+                                      letrec-body types-env))
       
       (set-exp (id new-exp)
-               (let((id (eval-var id)))
-                 (if (check-equal-type! (apply-tenv tenv id)
-                                        (type-of-expression new-exp tenv)
+               (let((id (evaluate-var id)))
+                 (if (check-equal-type! (apply-tenv types-env id)
+                                        (type-expression new-exp types-env)
                                         new-exp)
-                     (apply-tenv tenv id)
+                     (apply-tenv types-env id)
                      "Types don't macth in set-exp"
                      )
                  )
                )
 
-      (BLOCK-exp (first-instruct instructs)
-                 (return-last-type first-instruct instructs tenv)                  
+      (block-exp (first-instruct instructs)
+                 (return-last-type first-instruct instructs types-env)                  
                  )
       
       (while-exp (test-exp first-exp exps)
-                 (let ((test-type (type-of-expression test-exp tenv)))
+                 (let ((test-type (type-expression test-exp types-env)))
                    (begin (check-equal-type! test-type bool-type test-exp)
-                          (return-last-type first-exp exps tenv)
+                          (return-last-type first-exp exps types-env)
                           )
                    )       
                  )
@@ -1904,7 +1884,7 @@
                (if (and (correct-beginning? id beginning)
                         (correct-stop-cond? stop-cond)
                         (correct-sumator? sumator))
-                   (return-last-type first-exp exps tenv)
+                   (return-last-type first-exp exps types-env)
                    (eopl:error "bab value for inicializators in for-exp")
                    )
                )
@@ -1912,18 +1892,18 @@
       (switch-exp (option coincidences coincidence-exps default-exp)
                   (if (valid-option? option)
                       (let*(
-                            (op-type (type-of-expression option tenv))
-                            (cases (types-of-expressions coincidences tenv))
+                            (op-type (type-expression option types-env))
+                            (cases (types-of-expressions coincidences types-env))
                             (cases-type (type-of-structure cases))
-                            (coincidence-exp(coincidence-case
+                            (coincidence-exp(iqual-case
                                              (eval-expression option (empty-env))
                                              (eval-rands coincidences (empty-env))
                                              coincidence-exps)))
       
                         (if (check-equal-type! op-type cases-type option)
                             (if (string? coincidence-exp)
-                                (type-of-expression default-exp tenv)
-                                (type-of-expression coincidence-exp tenv)    
+                                (type-expression default-exp types-env)
+                                (type-expression coincidence-exp types-env)    
                                 )
                             "type of option and cases didn't match"
                             )
@@ -1989,14 +1969,14 @@
              (cons '*
                    (arg-types-to-external-form (cdr types))))))))
 
-;type-of-proc-exp: (list-of <type-exp>) (list-of <symbol>) <expression> <tenv> -> <type>
+;type-of-proc-exp: (list-of <type-exp>) (list-of <symbol>) <expression> <types-env> -> <type>
 ; función auxiliar para determinar el tipo de una expresión de creación de procedimiento
 (define type-of-proc-exp
-  (lambda (texps ids body tenv)
+  (lambda (texps ids body types-env)
     (let ((arg-types (expand-type-expressions texps)))
       (let ((result-type
-             (type-of-expression body
-                                 (extend-tenv ids arg-types tenv))))
+             (type-expression body
+                                 (extend-tenv ids arg-types types-env))))
         (proc-type arg-types result-type)
         ))))
 
@@ -2012,7 +1992,7 @@
                         check-equal-type!
                         rand-types arg-types rands)
                        result-type)
-                     (eopl:error 'type-of-expression
+                     (eopl:error 'type-expression
                                  (string-append
                                   "Wrong number of arguments in expression ~s:"
                                   "~%expected ~s~%got ~s")
@@ -2020,7 +2000,7 @@
                                  (map type-to-external-form arg-types)
                                  (map type-to-external-form rand-types))))
       (else
-       (eopl:error 'type-of-expression
+       (eopl:error 'type-expression
                    "Rator not a proc type:~%~s~%had rator type ~s"
                    rator (type-to-external-form rator-type))))
     )
@@ -2030,41 +2010,41 @@
 ; función auxiliar para determinar el tipo de una primitiva
 (define type-of-un-primitive
   (lambda (prim)
-    (cases unary-primitive prim
-      (primitive-lenght ()
+    (cases primitive-una prim
+      (lenght-prim ()
                         (proc-type (list string-type) int-type))
       
-      (primitive-add1 ()
+      (addn-prim ()
                       (list
                        (proc-type (list int-type) int-type)
                        (proc-type (list float-type) float-type)
                        ))
       
-      (primitive-sub1 ()
+      (subn-prim ()
                       (list
                        (proc-type (list int-type) int-type)
                        (proc-type (list float-type) float-type)
                        ))
       
-      (primitive-neg-boolean()
+      (negBoolean-prim()
                             (proc-type (list bool-type) bool-type))
       
-      (primitive-empty() proc-types-list )
+      (empty-prim() proc-types-list )
 
-      (make-g-primitive() (proc-type (list vertices-type edges-type) graph-type))
+      (makeG-prim() (proc-type (list vertices-type edges-type) graph-type))
 
-      (primitiva-edges() (proc-type (list graph-type) generic-structure-type))
+      (edges-prim() (proc-type (list graph-type) generic-structure-type))
 
-      (primitiva-vertices() (proc-type (list graph-type) vertices-type))
+      (vertices-prim() (proc-type (list graph-type) vertices-type))
 
-      (make-l-primitive() (list (proc-type (list generic-structure-type) generic-structure-type)
+      ( makeL-prim() (list (proc-type (list generic-structure-type) generic-structure-type)
                                 (proc-type (list empty-list-type) empty-list-type)
                                 (proc-type (list int-type) int-list-type)
                                 (proc-type (list float-type) float-list-type)
                                 (proc-type (list bool-type) bool-list-type)
                                 (proc-type (list string-type) string-list-type)))
 
-      (make-v-primitive() (list (proc-type (list int-type int-type) int-vect-type)
+      (makeV-prim() (list (proc-type (list int-type int-type) int-vect-type)
                                 (proc-type (list int-type float-type) float-vect-type)
                                 (proc-type (list int-type bool-type) bool-vect-type)
                                 (proc-type (list int-type string-type) string-vect-type)
@@ -2073,33 +2053,33 @@
                                 (proc-type (list bool-type) bool-vect-type)
                                 (proc-type (list string-type) string-vect-type)))
 
-      (make-d-primitive() (list (proc-type (list string-list-type generic-structure-type) generic-dict-type)
+      (makeD-prim() (list (proc-type (list string-list-type generic-structure-type) generic-dict-type)
                                 (proc-type (list string-list-type int-vect-type) int-dict-type)
                                 (proc-type (list string-list-type float-vect-type) float-dict-type)
                                 (proc-type (list string-list-type bool-vect-type) bool-dict-type)
                                 (proc-type (list string-list-type string-vect-type) string-dict-type)))
       
-      (primitive-list() proc-types-list)
+      (list-prim() proc-types-list)
       
-      (primitive-head() (list
+      (head-prim() (list
                          (proc-type (list int-list-type) int-type)
                          (proc-type (list float-list-type) float-type)
                          (proc-type (list bool-list-type) bool-type)
                          (proc-type (list string-list-type) string-type)))
       
-      (primitive-tail() (list
+      (tail-prim() (list
                          (proc-type (list int-list-type) int-list-type)
                          (proc-type (list float-list-type) float-list-type)
                          (proc-type (list bool-list-type) bool-list-type)
                          (proc-type (list string-list-type) string-list-type)))
       
-      (primitive-keys-dict()(list
+      (keysDict-prim()(list
                              (proc-type (list (structure-type 'dict '(string int))) string-list-type)
                              (proc-type (list (structure-type 'dict '(string float))) string-list-type)
                              (proc-type (list (structure-type 'dict '(string bool))) string-list-type)
                              (proc-type (list (structure-type 'dict '(string string))) string-list-type)))
       
-      (primitive-values-dict()(list
+      (valuesD-prim()(list
                                (proc-type (list (structure-type 'dict '(string int))) int-vect-type)
                                (proc-type (list (structure-type 'dict '(string float))) float-vect-type)
                                (proc-type (list (structure-type 'dict '(string bool))) bool-vect-type)
@@ -2112,41 +2092,40 @@
 
 ;type-of-primitive: <primitive binaria> -> <type>
 ;función auxiliar para determinar el tipo de una primitiva binaria
-(define type-of-bin-primitive
+(define type-binaria-prim
   (lambda (prim)
-    (cases primitiva-binaria prim
-      (primitiva-suma () basic-aritmetic-types)
+    (cases primitive-bin prim
+      (suma-prim () basic-aritmetic-types)
       
-      (primitiva-resta () basic-aritmetic-types)
+      (resta-prim () basic-aritmetic-types)
       
-      (primitiva-div () basic-aritmetic-types)
+      (div-prim () basic-aritmetic-types)
       
-      (primitiva-multi () basic-aritmetic-types)
+      (multi-prim () basic-aritmetic-types)
 
-      (primitiva-mod () basic-aritmetic-types)
+      (mod-prim () basic-aritmetic-types)
       
-      (primitiva-concat()
-                       (proc-type (list string-type string-type) string-type))
+      (concat-prim()(proc-type (list string-type string-type) string-type))
       
-      (primitiva-mayor() basic-logical-types)
+      (mayor-prim() basic-logical-types)
       
-      (primitiva-menor() basic-logical-types)
+      (menor-prim() basic-logical-types)
       
-      (primitiva-mayor-igual() basic-logical-types)
+      (mayorIgual-prim() basic-logical-types)
       
-      (primitiva-menor-igual() basic-logical-types)
+      (menorIgual-prim() basic-logical-types)
       
-      (primitiva-diferente() basic-logical-types)
+      (dif-prim() basic-logical-types)
       
-      (primitiva-comparador-igual() basic-logical-types)
+      (comparador-prim() basic-logical-types)
 
-      (primitiva-add-edge () graph-type)
+      (addEdge-prim () graph-type)
       
-      (primitiva-vecinos-en() string-list-type)
+      (vecinosEn-prim() string-list-type)
 
-      (primitiva-vecinos-sal() string-list-type)
+      (vecinosSa-prim() string-list-type)
       
-      (primitiva-append ()
+      (append-prim ()
                         (list
                          (proc-type (list string-list-type generic-structure-type) generic-structure-type)
                          (proc-type (list vertices-type vertices-type) generic-structure-type)
@@ -2160,38 +2139,38 @@
                          (proc-type (list bool-list-type bool-list-type) bool-list-type)
                          (proc-type (list string-list-type  string-list-type) string-list-type)))
       
-      (primitiva-ref-vector ()
+      (refVector-prim ()
                             (list (proc-type (list int-vect-type int-type) int-type)
                                   (proc-type (list float-vect-type int-type) float-type)
                                   (proc-type (list bool-vect-type int-type) bool-type)
                                   (proc-type (list string-vect-type int-type) string-type))
                             )
       
-      (primitiva-set-vector()
+      (setVector-prim()
                            (list (proc-type (list int-vect-type int-type int-type) bool-type)
                                  (proc-type (list float-vect-type int-type float-type) bool-type)
                                  (proc-type (list bool-vect-type int-type bool-type) bool-type)
                                  (proc-type (list string-vect-type int-type string-type) bool-type)))
       
-      (primitiva-append-vector ()
+      (appendVector-prim ()
                                (list (proc-type (list int-vect-type int-type) int-vect-type)
                                      (proc-type (list float-vect-type float-type) float-vect-type)
                                      (proc-type (list bool-vect-type bool-type) bool-vect-type)
                                      (proc-type (list string-vect-type string-type) string-vect-type)))
       
-      (primitiva-delete-val-pos ()
+      (deleteV-prim ()
                                 (list (proc-type (list int-vect-type int-type) int-vect-type)
                                       (proc-type (list float-vect-type int-type) float-vect-type)
                                       (proc-type (list bool-vect-type int-type) bool-vect-type)
                                       (proc-type (list string-vect-type int-type) string-vect-type)))
-      (primitiva-ref-dict ()
+      (refDict-prim ()
                           (list
                            (proc-type (list (structure-type 'dict '(string int)) string-type) int-type)
                            (proc-type (list (structure-type 'dict '(string float)) string-type) float-type)
                            (proc-type (list (structure-type 'dict '(string bool)) string-type) bool-type)
                            (proc-type (list (structure-type 'dict '(string string)) string-type) string-type)))
       
-      (primitiva-set-dict ()
+      (setDict-prim ()
                           (list
                        
                            (proc-type (list (structure-type 'dict '(string int)) string-type int-type) bool-type)
@@ -2208,24 +2187,24 @@
 ;types-of-expressions: (list-of <type-exp>) <tenv> -> (list-of <type>)
 ;función que mapea la función type-of-expresion a una lista
 (define types-of-expressions
-  (lambda (rands tenv)
-    (map (lambda (exp) (type-of-expression exp tenv)) rands)))
+  (lambda (rands types-env)
+    (map (lambda (exp) (type-expression exp types-env)) rands)))
 
-;type-of-primitive: (list-of <symbol>) (list-of <expression>) <expression> <tenv> -> <type>
+;type-of-primitive: (list-of <symbol>) (list-of <expression>) <expression> <types-env> -> <type>
 ;función auxiliar para determinar el tipo de una expresión let
 (define type-of-let-exp
-  (lambda (ids rands body tenv)
+  (lambda (ids rands body types-env)
     (let ((tenv-for-body
            (extend-tenv
             ids
-            (types-of-expressions rands tenv)
-            tenv)))
-      (type-of-expression body tenv-for-body))))
+            (types-of-expressions rands types-env)
+            types-env)))
+      (type-expression body tenv-for-body))))
 
 ;type-of-primitive: (list-of <type-exp>) (list-of <symbol>) (list-of (list-of <type-exp>)) (list-of (list-of <symbol>)) (list-of <expression>) <expression> <tenv> -> <type>
 ; función auxiliar para determinar el tipo de una expresión letrec
 (define type-of-letrec-exp
-  (lambda (result-texps proc-names texpss idss bodies letrec-body tenv)
+  (lambda (result-texps proc-names texpss idss bodies letrec-body types-env)
     (let ((arg-typess (map (lambda (texps)
                              (expand-type-expressions texps))
                            texpss))
@@ -2233,17 +2212,17 @@
       (let ((the-proc-types
              (map proc-type arg-typess result-types)))
         (let ((tenv-for-body
-               (extend-tenv proc-names the-proc-types tenv)))
+               (extend-tenv proc-names the-proc-types types-env)))
           (for-each
            (lambda (ids arg-types body result-type)
              (check-equal-type!
-              (type-of-expression
+              (type-expression
                body
                (extend-tenv ids arg-types tenv-for-body))
               result-type
               body))
            idss arg-typess bodies result-types)
-          (type-of-expression letrec-body tenv-for-body))))))
+          (type-expression letrec-body tenv-for-body))))))
 
 ;type-of-estructure <list> -> type
 ;funcion que retorna el atomic type de una estructura, si todos sus elementos son
@@ -2286,22 +2265,21 @@ int @a = 2, int es el identificador de tipo
 ;Funcion que ejecuta un serie de instrucciones y retorna el tipo de la ultima
 ;que ejecuta.
 (define return-last-type
-  (lambda (first-instruct instructs tenv)
-    (let loop ((first-type (type-of-expression first-instruct tenv))
+  (lambda (first-instruct instructs types-env)
+    (let loop ((first-type (type-expression first-instruct types-env))
                (instructs instructs))
       (if (null? instructs) 
           first-type
-          (loop (type-of-expression (car instructs) tenv)
+          (loop (type-expression (car instructs) types-env)
                 (cdr instructs)))
       )
     )
   )
 
-;match-unary-prim-type <list-of type> <list-of type> -> type
-;Funcion recibe un lista 2 listas de tipos, extrae el typo de la primera list y retorna
-;con cual de los tipos de la segunda list coincide.
-;NOTA: usado para las primitivas unarias
-(define match-unary-prim-type
+;función find-unary-prim-type busca encontrar una coincidencia entre un tipo de argumento (arg-type) y una lista de
+;tipos de primitivas unarias (cases). Si encuentra un caso que coincide con el tipo del argumento,
+;devuelve ese caso; de lo contrario, arroja un error si no hay coincidencia
+(define find-unary-prim-type
   (lambda (arg-type cases)
     (let((arg-type (if (list? arg-type)
                        (type-of-structure arg-type)
@@ -2309,14 +2287,14 @@ int @a = 2, int es el identificador de tipo
                        )))
       (if (list? cases)
           (cond
-            ((null? cases) (eopl:error 'match-unary-prim-type
+            ((null? cases) (eopl:error 'find-unary-prim-type
                                        "~%Type ~s not found in ~s" arg-type cases))
       
             ((equal? arg-type (extrac-arg-type-proc (car cases)))
              (car cases))
       
             (else
-             (match-unary-prim-type arg-type (cdr cases)))
+             (find-unary-prim-type arg-type (cdr cases)))
             )
           cases
           )
@@ -2326,7 +2304,7 @@ int @a = 2, int es el identificador de tipo
   )
 
 
-;match-binary-prim-type <type> <type> <list-of types> -> type
+;find-binary-prim-type <type> <type> <list-of types> -> type
 ;Funcion que recibe 2 types y una list de proc-types y verifica si los 2 types
 ;coinciden con alguno de los proc-types de la list de proc-types
 
@@ -2334,41 +2312,36 @@ int @a = 2, int es el identificador de tipo
 ;incluir dentro de las primitivas unarias las primitivas makes(vector,list,dict y graph)
 ;se uso tambien para verificar los 4 casos de las primitivas make mencionadas
 
-(define match-binary-prim-type
+(define find-binary-prim-type
   (lambda (arg-type1 arg-type2 cases)
     (if (list? cases)
         (cond
-          ((null? cases)(eopl:error 'match-binary-prim-type
+          ((null? cases)(eopl:error 'find-binary-prim-type
                                     "~%Types ~s, ~s not found in ~s"
                                     arg-type1 arg-type2 cases))
           ((and (equal? arg-type1 (car (extrac-args-types-proc (car cases))))
                 (equal? arg-type2 (cadr (extrac-args-types-proc (car cases))))
                 )(car cases))
           (else
-           (match-binary-prim-type arg-type1 arg-type2 (cdr cases)))
+           (find-binary-prim-type arg-type1 arg-type2 (cdr cases)))
           )
         cases
         )
     )
   )
 
-;match-binary-prim-exption-type <type> <type> <type> <list-of types>
-;Funcion que retorna el caso de coincidencia del tipo de las primitivas
-;set-vect y set-dict
 
-;NOTA:Esta funcion es igual a match-binary-prim-type solo que recibe un type mas,
-;se realizo este ajuste, para las primitivas binarias set-vector y set-dict
-;ya que estas se trabajaron asi: app-b(@miVec set-vector (1 , 2.4)) en este caso
-;se usaba una lista para pasarle la posicion y el valor, por lo tanto en algunos
-;casos como el de un vector de flotantes quedaba un lista con un entero(posicion) y un
-;flotante(nuevo valor), lo cual no era una lista valida para la definicion del proyecto,
-;la cual no aceptaba listas de valores mixtos
 
-(define match-binary-prim-exeption-type
+;unción resolve-binary-prim-case busca coincidir tres tipos de argumentos
+;(arg-type1, arg-type2, arg-type3) con una lista de casos (cases) de primitivas binarias.
+;Si encuentra un caso que coincide, devuelve ese caso;
+;de lo contrario, arroja un error si no hay coincidencia.
+
+(define resolve-binary-prim-case
   (lambda (arg-type1 arg-type2 arg-type3 cases)
     (if (list? cases)
         (cond
-          ((null? cases)(eopl:error 'match-binary-prim-exeption-type
+          ((null? cases)(eopl:error 'resolve-binary-prim-case
                                     "~%Types ~s, ~s, ~s not found in ~s"
                                     arg-type1 arg-type2 arg-type3 cases))
           ((and (equal? arg-type1 (car (extrac-args-types-proc (car cases))))
@@ -2376,7 +2349,7 @@ int @a = 2, int es el identificador de tipo
                 (equal? arg-type3 (caddr (extrac-args-types-proc (car cases))))
                 )(car cases))
           (else
-           (match-binary-prim-exeption-type arg-type1 arg-type2 arg-type3 (cdr cases)))
+           (resolve-binary-prim-case arg-type1 arg-type2 arg-type3 (cdr cases)))
           )
         cases
         )
@@ -2414,9 +2387,9 @@ int @a = 2, int es el identificador de tipo
 ;en su construccion, vector-prim y dict-prim, por el mismo motivo de las listas mistax no aceptadas
 (define unary-exeption-prim?
   (lambda (un-prim)
-    (cases unary-primitive un-prim
-      (make-v-primitive() "vector-prim")
-      (make-d-primitive() "dict-prim")
+    (cases primitive-una un-prim
+      (makeV-prim() "vector")
+      (makeD-prim() "dict")
       (else "Is no a unary-exeption-prim")
       )
     )
@@ -2427,13 +2400,13 @@ int @a = 2, int es el identificador de tipo
 (define correct-stop-cond?
   (lambda (type-stop-cond)
     (cases expression type-stop-cond
-      (primapp-bin-exp(e1 prim e2)
-                      (cases primitiva-binaria prim
-                        (primitiva-mayor()#t)
-                        (primitiva-menor()#t)
-                        (primitiva-mayor-igual()#t)
-                        (primitiva-menor-igual()#t)
-                        (primitiva-comparador-igual()#t)
+      (primbi-exp(e1 prim e2)
+                      (cases primitive-bin prim
+                        (mayor-prim()#t)
+                        (menor-prim()#t)
+                        (mayorIgual-prim()#t)
+                        (menorIgual-prim()#t)
+                        (comparador-prim()#t)
                         (else #f)))
       (else #f))
     )
@@ -2447,8 +2420,8 @@ int @a = 2, int es el identificador de tipo
     (if (and
          (is-id? id)
          (cases expression beginning
-           (lit-ent-exp(n) #t)
-           (lit-float-exp(n)#t)
+           (ent-exp(n) #t)
+           (float-exp(n)#t)
            (else #f))
          )#t #f)
     )
@@ -2463,11 +2436,11 @@ int @a = 2, int es el identificador de tipo
   (lambda(sumator)
     (cases expression sumator
       (set-exp (id exp) (cases expression exp
-                          (primapp-bin-exp (e1 prim e2)
-                                           (cases primitiva-binaria prim
-                                             (primitiva-suma()#t)
-                                             (primitiva-resta()#t)
-                                             (primitiva-multi()#t)
+                          (primbi-exp (e1 prim e2)
+                                           (cases primitive-bin prim
+                                             (suma-prim()#t)
+                                             (resta-prim()#t)
+                                             (multi-prim()#t)
                                              (else #f)))
                           (else "bad value for sumator(prim)")
                           ))
@@ -2481,7 +2454,7 @@ int @a = 2, int es el identificador de tipo
 (define is-id?
   (lambda (id)
     (let* ((cadena (symbol->string id))
-           (indice (caracter-index cadena)))
+           (indice (find-char-index cadena)))
       (if (= indice 0) #t #f)
       )
     )
@@ -2493,21 +2466,21 @@ int @a = 2, int es el identificador de tipo
 (define valid-option?
   (lambda (op)
     (cases expression op
-      (lit-ent-exp(n) #t)
-      (lit-float-exp(n)#t)
+      (ent-exp(n) #t)
+      (float-exp(n)#t)
       (text-exp(t)#t)
       (else #f))
   )
 )
 
-;coincidence-case <scheme-value> <list-of scheme-value> <list-of expression> -> expression
+;iqual-case <scheme-value> <list-of scheme-value> <list-of expression> -> expression
 ;Funcion que recibe un valor y una lista de casos y retorna la expression del caso de coincidencia del valor
-(define coincidence-case
+(define iqual-case
   (lambda (op cases exps)
     (cond
-      ((null? cases) "default")
+      ((null? cases) "por defecto")
       ((equal? op (car cases)) (car exps))
-      (else (coincidence-case op (cdr cases) (cdr exps)))
+      (else (iqual-case op (cdr cases) (cdr exps)))
       )
   )
 )
